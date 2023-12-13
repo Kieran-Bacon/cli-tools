@@ -5,6 +5,10 @@ import pypdf
 import fitz
 import logging
 from typing import List
+import piexif
+import arrow
+import itertools
+from typing import Optional
 
 from PIL import Image
 
@@ -23,31 +27,67 @@ def cli(debug: bool):
 @click.argument('output_path', nargs=1)
 def merge(files: List[str], output_path: str):
 
+    if not files:
+        print('No files provided')
+
     pdfMerger = pypdf.PdfMerger()
 
     for file in files:
+        print('merging', file)
         pdfMerger.append(file)
 
+    print('writing to', output_path)
     pdfMerger.write(output_path)
     pdfMerger.close()
 
 @cli.command()
 @click.argument('file_path')
+@click.option('--page-select')
 @click.option('--out-path')
 @click.option('--replace/--no-replace', default=False)
 @click.option('--format')
-def imageify(file_path: str, out_path: str = None, replace: bool = False, format: str = None):
+@click.option('--date-taken')
+def imageify(
+    file_path: str,
+    page_select: Optional[str] = None,
+    out_path: Optional[str] = None,
+    replace: bool = False,
+    format: Optional[str] = None,
+    date_taken: Optional[str] = None,
+    ):
+    """ Convert a PDF document into an image
+
+    Args:
+        file_path (str): The relative path to the file
+        out_path (str, optional): The relative path to the output. Defaults to None.
+        replace (bool, optional): Toggle to remove the original file. Defaults to False.
+        format (str, optional): The format of the image to create. Defaults to None.
+        date_created (str, optional): The ISO format of the time the image was created. Defaults to None.
+    """
+
+    if page_select is not None:
+        pages = []
+        for identifier in page_select.split(','):
+            if '-' in identifier:
+                start, end = identifier.split('-')
+                pages.extend(range(int(start), int(end)))
+            else:
+                pages.append(int(identifier))
+
+    else:
+        pages = itertools.count(0, 1)
+
 
     if format is None:
         format = 'jpg'
 
+    # Open and parse the pages of the document
     doc = fitz.open(file_path)
 
-    pageIndex = 0
     images = []
     maxWidth, height = 0, 0
 
-    while True:
+    for pageIndex in pages:
 
         try:
             page = doc.load_page(pageIndex)  # number of page
@@ -58,13 +98,13 @@ def imageify(file_path: str, out_path: str = None, replace: bool = False, format
             height += image.height
 
             images.append(image)
-            pageIndex += 1
 
         except:
             break
 
-    # Concatinate the images
+    doc.close()
 
+    # Concatinate the images
     dst = Image.new('RGB', (maxWidth, height))
 
     pasted_height = 0
@@ -72,15 +112,25 @@ def imageify(file_path: str, out_path: str = None, replace: bool = False, format
         dst.paste(image, (0, pasted_height))
         pasted_height += image.height
 
-    replacepath = stow.join(stow.dirname(file_path), stow.name(file_path) + f'.{format}')
+    # Create the image metadata
+    originalDatetime = arrow.get() if date_taken is None else arrow.get(date_taken)
+    digitizedDatetime = arrow.get()
+
+    exif_dict={
+        'Exif':{
+            piexif.ExifIFD.DateTimeOriginal: originalDatetime.strftime("%Y:%m:%d %H:%M:%S"),
+            piexif.ExifIFD.DateTimeDigitized: digitizedDatetime.strftime("%Y:%m:%d %H:%M:%S"),
+        }
+    }
+
+
+    # Write the image to disk
+    if out_path is None:
+        out_path = stow.join(stow.dirname(file_path), stow.name(file_path) + f'.{format}')
+
+    print(f'saving file to {out_path}')
+    dst.save(out_path, exif=piexif.dump(exif_dict))
+
     if replace:
-        dst.save(replacepath)
+        print(f'Removing original input file: {file_path}')
         stow.rm(file_path)
-
-    else:
-        if out_path is None:
-            out_path = replacepath
-        print(f'saving file to {out_path}')
-        dst.save(out_path)
-
-    doc.close()
