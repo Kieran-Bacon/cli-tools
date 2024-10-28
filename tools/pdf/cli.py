@@ -23,6 +23,32 @@ def cli(debug: bool):
         log.info('Debugging enabled')
 
 @cli.command()
+@click.argument('pdf_file')
+def split(pdf_file: str):
+
+    with open(pdf_file, 'rb') as handle:
+        reader = pypdf.PdfReader(handle)
+
+        page_num = 0
+        while True:
+
+            try:
+                reader_page = reader.get_page(page_num)
+                page_num += 1
+            except Exception as e:
+                break
+
+            page_writer = pypdf.PdfWriter()
+            page_writer.add_page(reader_page)
+
+            destination = stow.abspath(stow.join(stow.dirname(pdf_file), stow.name(pdf_file) + f'-p{page_num}.pdf'))
+            print('writing', destination)
+
+            with open(destination, 'wb') as output_handle:
+                page_writer.write(output_handle)
+
+
+@cli.command()
 @click.argument('files', nargs=-1)
 @click.argument('output_path', nargs=1)
 def merge(files: List[str], output_path: str):
