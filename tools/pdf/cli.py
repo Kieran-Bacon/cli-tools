@@ -22,9 +22,12 @@ def cli(debug: bool):
         logging.basicConfig(level=logging.DEBUG)
         log.info('Debugging enabled')
 
+# TODO page select - select the pages that are to be kept, e.g. 1,2,5 2,3 8,9 => 3 files produced with those pages extracted
+# TODO number of pages split e.g. --split-every 4, creates pdfs every 4 pages instead of one. one is default
 @cli.command()
 @click.argument('pdf_file')
 def split(pdf_file: str):
+    """ Split a pdf file into its individual pages """
 
     with open(pdf_file, 'rb') as handle:
         reader = pypdf.PdfReader(handle)
