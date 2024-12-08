@@ -47,6 +47,35 @@ def insert(target, source, destination, page_selection, location_selection):
 
     pass
 
+# TODO page select - select the pages that are to be kept, e.g. 1,2,5 2,3 8,9 => 3 files produced with those pages extracted
+# TODO number of pages split e.g. --split-every 4, creates pdfs every 4 pages instead of one. one is default
+@cli.command()
+@click.argument('pdf_file')
+def split(pdf_file: str):
+    """ Split a pdf file into its individual pages """
+
+    with open(pdf_file, 'rb') as handle:
+        reader = pypdf.PdfReader(handle)
+
+        page_num = 0
+        while True:
+
+            try:
+                reader_page = reader.get_page(page_num)
+                page_num += 1
+            except Exception as e:
+                break
+
+            page_writer = pypdf.PdfWriter()
+            page_writer.add_page(reader_page)
+
+            destination = stow.abspath(stow.join(stow.dirname(pdf_file), stow.name(pdf_file) + f'-p{page_num}.pdf'))
+            print('writing', destination)
+
+            with open(destination, 'wb') as output_handle:
+                page_writer.write(output_handle)
+
+
 @cli.command()
 @click.argument('files', nargs=-1)
 @click.argument('output_path', nargs=1)
