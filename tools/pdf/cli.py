@@ -14,6 +14,8 @@ from PIL import Image
 
 log = logging.getLogger(__name__)
 
+import numpy as np
+
 @click.group()
 @click.option('--debug/--no-debug', default=False)
 def cli(debug: bool):
@@ -21,31 +23,64 @@ def cli(debug: bool):
     if debug:
         logging.basicConfig(level=logging.DEBUG)
         log.info('Debugging enabled')
-@cli.command()
-@click.argument('target', help='The file to have pages inserted into')
-@click.argument('source', help='The source file to have pages pulled from to insert')
-@click.argument('destination', help='The final output location')
-@click.argument('page_selection', help='Select the pages that are being extracted from source')
-@click.argument('location_select', help='Select the locations for those pages, must be one to one with page_select')
-def insert(target, source, destination, page_selection, location_selection):
 
-    if not stow.exists(target) or not stow.exists(source) or stow.exists(destination):
+@cli.command()
+@click.argument('target', )
+@click.argument('source', )
+@click.argument('destination', )
+@click.argument('page_selection', )
+@click.argument('location_selection', )
+def insert(target, source, destination, page_selection, location_selection):
+    """ Insert some pages from one file into another
+
+    Args:
+        target (_type_): help='The file to have pages inserted into'
+        source (_type_): help='The source file to have pages pulled from to insert'
+        destination (_type_): help='The final output location'
+        page_selection (_type_): help='Select the pages that are being extracted from source'
+        location_selection (_type_): help='Select the locations for those pages, must be one to one with page_select'
+    """
+
+    if not stow.exists(target) or not stow.exists(source):
         print('Files specified are not allowed')
         exit()
 
-    page_selection_indexes = [int(x) for x in page_selection.split(',')]
-    location_selection_indexes = [int(x) for x in location_selection.split(',')]
+    # Extract the page selection
+    page_selection_indexes = np.array([int(x)-1 for x in page_selection.split(',')])
+    location_selection_indexes = np.array([int(x)-1 for x in location_selection.split(',')])
 
-    if len(page_selection_indexes) != location_selection_indexes:
+    print(page_selection_indexes, location_selection_indexes)
+
+    if page_selection_indexes.size != location_selection_indexes.size:
         print(f'You page selection and location selection must be the same length :: {len(page_selection_indexes)}, {len(location_selection_indexes)}')
         exit()
 
+    # Sort the insert locations as during insert they effect the locations of other inserts
+    # Must reverse order to insert from behind
+    sortIndex = np.argsort(location_selection_indexes)[::-1]
+    page_selection_indexes = np.take_along_axis(page_selection_indexes, sortIndex, axis=0)
+    location_selection_indexes = np.take_along_axis(location_selection_indexes, sortIndex, axis=0)
 
+    with open(target, 'rb') as target_handle, open(source, 'rb') as source_handle:
+        target_pdf = pypdf.PdfReader(target_handle)
+        source_pdf = pypdf.PdfReader(source_handle)
 
+        # Fetch the pages from the target document
+        pages = list(target_pdf.pages)
 
+        # Iterate through the indexes provided
+        for page_index, location_index in zip(page_selection_indexes, location_selection_indexes):
+            print(page_index, location_index)
+            pages.insert(int(location_index), source_pdf.pages[int(page_index)])
 
+        # Write the new pages in the writer
+        page_writer = pypdf.PdfWriter()
+        for page in pages:
+            page_writer.add_page(page)
 
-    pass
+        with open(destination, 'wb') as output_handle:
+            page_writer.write(output_handle)
+
 
 # TODO page select - select the pages that are to be kept, e.g. 1,2,5 2,3 8,9 => 3 files produced with those pages extracted
 # TODO number of pages split e.g. --split-every 4, creates pdfs every 4 pages instead of one. one is default
