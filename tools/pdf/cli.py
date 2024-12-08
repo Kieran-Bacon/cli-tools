@@ -21,6 +21,31 @@ def cli(debug: bool):
     if debug:
         logging.basicConfig(level=logging.DEBUG)
         log.info('Debugging enabled')
+@cli.command()
+@click.argument('target', help='The file to have pages inserted into')
+@click.argument('source', help='The source file to have pages pulled from to insert')
+@click.argument('destination', help='The final output location')
+@click.argument('page_selection', help='Select the pages that are being extracted from source')
+@click.argument('location_select', help='Select the locations for those pages, must be one to one with page_select')
+def insert(target, source, destination, page_selection, location_selection):
+
+    if not stow.exists(target) or not stow.exists(source) or stow.exists(destination):
+        print('Files specified are not allowed')
+        exit()
+
+    page_selection_indexes = [int(x) for x in page_selection.split(',')]
+    location_selection_indexes = [int(x) for x in location_selection.split(',')]
+
+    if len(page_selection_indexes) != location_selection_indexes:
+        print(f'You page selection and location selection must be the same length :: {len(page_selection_indexes)}, {len(location_selection_indexes)}')
+        exit()
+
+
+
+
+
+
+    pass
 
 @cli.command()
 @click.argument('files', nargs=-1)
@@ -29,6 +54,7 @@ def merge(files: List[str], output_path: str):
 
     if not files:
         print('No files provided')
+        exit()
 
     pdfMerger = pypdf.PdfMerger()
 
